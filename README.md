@@ -11,3 +11,7 @@ This version still doesnt feel as good as modern native RTS camera drag such as 
 -Deadzone to avoid stairstepping behaviour when trying to drag camera straight up/down or sideways
 -Smoothing behaviour can be overtuned to enable snappier/overshooting instead of smooth/floaty.
 
+
+Usage:
+Run script as administrator with autohotkey 
+
