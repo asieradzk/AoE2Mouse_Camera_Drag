@@ -299,8 +299,8 @@ StartPan:
             newX := camX + velX
             newY := camY + velY
             
-            newX := (newX < 0) ? 0 : (newX > 120) ? 120 : newX
-            newY := (newY < 0) ? 0 : (newY > 120) ? 120 : newY
+            newX := (newX < 0) ? 0 : (newX > 360) ? 360 : newX
+            newY := (newY < 0) ? 0 : (newY > 360) ? 360 : newY
             
             if (Abs(newX - lastWrittenX) > MinWriteThreshold || Abs(newY - lastWrittenY) > MinWriteThreshold)
             {
@@ -365,5 +365,6 @@ return
     DllCall("winmm.dll\timeEndPeriod", UInt, 1)
     ExitApp
 return
+
 
 #IfWinActive
