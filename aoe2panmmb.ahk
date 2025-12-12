@@ -1,4 +1,4 @@
-﻿#NoEnv
+#NoEnv
 #SingleInstance Force
 SetWorkingDir %A_ScriptDir%
 SetBatchLines, -1
@@ -6,45 +6,27 @@ Process, Priority,, High
 
 DllCall("winmm.dll\timeBeginPeriod", UInt, 1)
 
-; ========== USER CONFIGURATION ==========
-; Main Settings
-PanKey := "MButton"                ; Mouse button to hold for camera drag
+PanKey := "MButton"
+BasePanSpeed := 0.0341
+InvertX := 1
+InvertY := 1
+SmoothingSlow := 0.5
+SmoothingFast := 1.2
+SpeedThreshold := 15.0
+BaseZoom := 1.0
+ZoomCompensationStrength := 1.0
+HorizontalMultiplier := 0.42
+VerticalMultiplier := 0.86
+DeadZonePixels := 1.5
+MinWriteThreshold := 0.0000005
+DiagonalBoost := 1.0
+DiagonalDeadZone := 2.5
 
-; Speed and Responsiveness
-BasePanSpeed := 0.0341              ; Base pan speed (calibrated for zoom 1.0)
-InvertX := 1                        ; Invert X axis (1 = yes, 0 = no)
-InvertY := 1                        ; Invert Y axis (1 = yes, 0 = no)
-
-; Adaptive Smoothing
-SmoothingSlow := 0.5               ; Smoothing for slow/precise movements
-SmoothingFast := 1.2                ; Smoothing for fast movements (>1 creates snappy acceleration)
-SpeedThreshold := 15.0               ; Speed threshold to transition between smooth values
-
-; Zoom Compensation
-BaseZoom := 1.0                     ; Zoom level where movement is 1:1
-ZoomCompensationStrength := 1.0     ; 0 = no zoom compensation, 1.0 = full compensation
-
-; Isometric View Compensation
-HorizontalMultiplier := 0.42        ; Adjusts left-right movement speed
-VerticalMultiplier := 0.86          ; Adjusts up-down movement speed
-
-; Dead Zones
-DeadZonePixels := 1.5               ; Ignore mouse movements smaller than this (reduces jitter)
-MinWriteThreshold := 0.0000005       ; Minimum change before updating camera position
-
-; Anti-Stairstepping for Diagonal Movement
-DiagonalBoost := 1.0                ; Boost diagonal movement (1.0 = no boost)
-DiagonalDeadZone := 2.5             ; Threshold for detecting diagonal movement
-
-; ========== MEMORY ADDRESSES ==========
-baseOffset := 0x03F0DD38
-offset1 := 0x28
+baseOffset := 0x03F17268
 cameraXOffset := 0x2F8
 cameraYOffset := 0x2FC
-zoomBaseOffset := 0x03F07C28
-zoomOffset := 0xB8C
+zoomOffset := 0x39E785C
 
-; ========== MODULE BASE ADDRESS FUNCTION ==========
 GetModuleBaseAlt(moduleName)
 {
     Process, Exist, %moduleName%
@@ -79,7 +61,6 @@ GetModuleBaseAlt(moduleName)
     return baseAddress
 }
 
-; ========== MEMORY FUNCTIONS ==========
 GetProcessHandle()
 {
     Process, Exist, AoE2DE_s.exe
@@ -118,15 +99,6 @@ ReadPointerCorrect(hProcess, baseAddr)
     return addr
 }
 
-ReadZoomPointer(hProcess, baseAddr)
-{
-    VarSetCapacity(buffer, 8, 0)
-    DllCall("ReadProcessMemory", "Ptr", hProcess, "Ptr", baseAddr, "Ptr", &buffer, "UInt", 8, "Ptr", 0)
-    addr := NumGet(buffer, 0, "Int64")
-    return addr
-}
-
-; ========== PERFORMANCE COUNTER ==========
 QPCInit()
 {
     DllCall("QueryPerformanceFrequency", "Int64*", freq)
@@ -139,7 +111,6 @@ QPCNow()
     return counter
 }
 
-; ========== MAIN SCRIPT ==========
 #IfWinActive, ahk_exe AoE2DE_s.exe
 
 Hotkey, %PanKey%, StartPan
@@ -166,18 +137,13 @@ StartPan:
         return
     }
     
-    ; Get camera addresses
     baseAddr := moduleBase + baseOffset
     cameraBase := ReadPointerCorrect(hProcess, baseAddr)
     cameraXAddr := cameraBase + cameraXOffset
     cameraYAddr := cameraBase + cameraYOffset
     
-    ; Get zoom address
-    zoomBaseAddr := moduleBase + zoomBaseOffset
-    zoomBase := ReadZoomPointer(hProcess, zoomBaseAddr)
-    zoomAddr := zoomBase + zoomOffset
+    zoomAddr := moduleBase + zoomOffset
     
-    ; Initialize timing
     perfFreq := QPCInit()
     lastTime := QPCNow()
     
@@ -189,7 +155,6 @@ StartPan:
     lastWrittenX := ReadFloat(hProcess, cameraXAddr)
     lastWrittenY := ReadFloat(hProcess, cameraYAddr)
     
-    ; Default zoom value in case reading fails
     lastGoodZoom := 1.0
     
     While GetKeyState(PanKey, "P")
@@ -205,10 +170,8 @@ StartPan:
         timeMultiplier := deltaTime / 16.0
         lastTime := currentTime
         
-        ; Read current zoom level
         currentZoom := ReadFloat(hProcess, zoomAddr)
         
-        ; Validate zoom value
         if (currentZoom < 0.1 || currentZoom > 5.0)
         {
             currentZoom := lastGoodZoom
@@ -218,7 +181,6 @@ StartPan:
             lastGoodZoom := currentZoom
         }
         
-        ; Apply inverse zoom compensation
         if (ZoomCompensationStrength > 0)
         {
             zoomMultiplier := BaseZoom / currentZoom
@@ -258,7 +220,6 @@ StartPan:
         screenDeltaX *= HorizontalMultiplier
         screenDeltaY *= VerticalMultiplier
         
-        ; Direct isometric conversion
         isoDeltaX := (screenDeltaX - screenDeltaY) * 0.707 * diagonalMultiplier
         isoDeltaY := (screenDeltaX + screenDeltaY) * 0.707 * diagonalMultiplier
         
@@ -267,30 +228,22 @@ StartPan:
         if (InvertY)
             isoDeltaY := -isoDeltaY
         
-        ; Calculate movement speed for adaptive smoothing
         movementSpeed := Sqrt(rawDeltaX**2 + rawDeltaY**2)
         
-        ; Interpolate smoothing based on movement speed
-        ; Slow movements get 0.85, fast movements get 1.4
         if (movementSpeed < SpeedThreshold)
         {
-            ; For slow movements, use more smoothing
             currentSmoothing := SmoothingSlow
         }
         else
         {
-            ; Linearly interpolate between slow and fast smoothing
-            ; Speed range: SpeedThreshold to SpeedThreshold*5
             speedRatio := (movementSpeed - SpeedThreshold) / (SpeedThreshold * 4)
-            speedRatio := speedRatio > 1 ? 1 : speedRatio  ; Clamp to 1
+            speedRatio := speedRatio > 1 ? 1 : speedRatio
             currentSmoothing := SmoothingSlow + (SmoothingFast - SmoothingSlow) * speedRatio
         }
         
-        ; Apply velocity smoothing
         velX := velX * (1 - currentSmoothing) + isoDeltaX * currentSmoothing
         velY := velY * (1 - currentSmoothing) + isoDeltaY * currentSmoothing
         
-        ; Update camera position with smoothed velocity
         if (Abs(velX) > MinWriteThreshold || Abs(velY) > MinWriteThreshold)
         {
             camX := ReadFloat(hProcess, cameraXAddr)
@@ -319,12 +272,8 @@ StartPan:
     DllCall("winmm.dll\timeEndPeriod", UInt, 1)
 return
 
-; ========== HOTKEYS ==========
-
-; Reload script for testing
 ^!r::Reload
 
-; Show current zoom level
 ^!z::
     hProcess := GetProcessHandle()
     if (!hProcess)
@@ -345,9 +294,7 @@ return
         return
     }
     
-    zoomBaseAddr := moduleBase + zoomBaseOffset
-    zoomBase := ReadZoomPointer(hProcess, zoomBaseAddr)
-    zoomAddr := zoomBase + zoomOffset
+    zoomAddr := moduleBase + zoomOffset
     currentZoom := ReadFloat(hProcess, zoomAddr)
     
     zoomMultiplier := BaseZoom / currentZoom
@@ -360,11 +307,9 @@ return
     DllCall("CloseHandle", "Ptr", hProcess)
 return
 
-; Exit script
 ^!x::
     DllCall("winmm.dll\timeEndPeriod", UInt, 1)
     ExitApp
 return
-
 
 #IfWinActive
