@@ -1,3 +1,9 @@
+Archived!
+
+Please go here:
+https://github.com/Emerald3ME/AoE2DE-Drag-Scroll
+
+
 # AoE2Mouse_Camera_Drag
 AutohotkeyScript for Age Of Empires 2: Definitive Edition that allows Camera Dragging Controls
 
